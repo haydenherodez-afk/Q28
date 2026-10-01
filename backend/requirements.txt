@@ -1,0 +1,16 @@
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
+sqlalchemy==2.1.1
+psycopg[binary]==3.3.6
+pydantic==2.13.5
+pydantic-settings
+pyyaml
+python-multipart
+pyjwt==2.15.1
+pyotp==2.10.0
+bcrypt==5.0.0
+anthropic==1.11.0
+apscheduler==3.11.3
+boto3
+pypdf
+openpyxl

@@ -1,0 +1,50 @@
+# HericR — pravila za leto 2025 (SAMO normiranci, za preverjanje lanskega obračuna).
+# Ostala pravila za 2025 (prispevki, lestvica) niso vnesena — engine bo za njih
+# javil napako, ne bo ugibal.
+#
+# Preverjeno na uradnem obračunu eDavki (DDD-DDD) za s.p., odprt med letom 2025 (< 9 mesecev):
+# normirani odhodki so bili izračunani po tristopenjski shemi (80 % do 12.500 €, 40 % do
+# 30.000 €), dohodnina pa po enotni stopnji 20 %. (Zneski niso vključeni — repo je javen.)
+
+year: 2025
+checked_on: 2026-10-01
+
+rules:
+  - id: normiran.odhodki
+    title: Normirani odhodki (obračun 2025)
+    effective_from: 2025-01-01
+    effective_to: 2025-12-31
+    taxpayer_type: [normiran]
+    formula: "polni (≥ 9 mesecev): 80 % do 60.000 €; ostali: 80 % do 12.500 €, 40 % od 12.500 do 30.000 €, nad tem 0 %"
+    params:
+      full:
+        - {upto: 60000, rate: 0.80}
+        - {upto: null, rate: 0.0}
+      partial:
+        - {upto: 12500, rate: 0.80}
+        - {upto: 30000, rate: 0.40}
+        - {upto: null, rate: 0.0}
+      full_min_months: 9
+    source: "ZDoh-2, 59. člen; preverjeno na uradnem obračunu eDavki za 2025"
+    source_url: https://www.fu.gov.si/davki_in_druge_dajatve/podrocja/dohodnina/
+    source_date: 2026-03-02
+    verified: true
+    verified_by: [obračun eDavki DDD-DDD 2025]
+
+  - id: normiran.stopnja
+    title: Stopnja za normirance 2025 (enotna 20 %)
+    effective_from: 2025-01-01
+    effective_to: 2025-12-31
+    taxpayer_type: [normiran]
+    formula: "20 % od davčne osnove"
+    params:
+      full:
+        - {upto: null, rate: 0.20}
+      partial:
+        - {upto: null, rate: 0.20}
+      full_min_months: 9
+    source: "ZDoh-2; preverjeno na uradnem obračunu eDavki za 2025"
+    source_url: https://www.fu.gov.si/davki_in_druge_dajatve/podrocja/dohodnina/
+    source_date: 2026-03-02
+    verified: true
+    verified_by: [obračun eDavki DDD-DDD 2025]

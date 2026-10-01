@@ -1,0 +1,66 @@
+# HericR — celoten sistem z enim ukazom:   docker compose up -d   ->  http://localhost:3000
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hericr
+      POSTGRES_USER: hericr
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Nastavi POSTGRES_PASSWORD v .env}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hericr -d hericr"]
+      interval: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?Nastavi S3_ACCESS_KEY v .env}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?Nastavi S3_SECRET_KEY v .env}
+    volumes: [files:/data]
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+      minio: {condition: service_started}
+    environment:
+      HERICR_DATABASE_URL: postgresql+psycopg://hericr:${POSTGRES_PASSWORD}@db:5432/hericr
+      HERICR_SECRET_KEY: ${SECRET_KEY:?Nastavi SECRET_KEY v .env}
+      HERICR_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      HERICR_STORAGE: s3
+      HERICR_S3_ENDPOINT: http://minio:9000
+      HERICR_S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      HERICR_S3_SECRET_KEY: ${S3_SECRET_KEY}
+      HERICR_CORS_ORIGINS: http://localhost:3000
+      HERICR_TIMEZONE: Europe/Ljubljana
+      HERICR_DAILY_CHECK_HOUR: "7"
+
+  frontend:
+    build:
+      context: ./frontend
+      args: {HERICR_API_URL: "http://backend:8000"}
+    restart: unless-stopped
+    depends_on: [backend]
+    ports: ["${HERICR_PORT:-3000}:3000"]
+
+  # HTTPS za telefon (PWA zahteva https). Zaženi z:  docker compose --profile https up -d
+  caddy:
+    image: caddy:2-alpine
+    profiles: [https]
+    restart: unless-stopped
+    depends_on: [frontend]
+    ports: ["80:80", "443:443"]
+    environment: {DOMAIN: "${DOMAIN:-localhost}"}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy:/data
+
+volumes:
+  pgdata:
+  files:
+  caddy:

@@ -1,0 +1,336 @@
+# HericR — davčna pravila za leto 2026 (s.p., Slovenija)
+#
+# Vsako pravilo ima: id, veljavnost (effective_from/effective_to), za koga velja
+# (taxpayer_type), parametre, opis formule in VIR. Polje `verified` pove, ali je bila
+# vrednost preverjena v vsaj dveh neodvisnih virih (true) ali pa jo je treba še
+# potrditi pri FURS / računovodji (false). Engine NIKOLI ne izmišljuje vrednosti —
+# če pravila ni, izračun pade z napako.
+#
+# Preverjeno: 2026-10-01. Ob vsaki spremembi zakona posodobi to datoteko in poženi
+# `pytest` — zlati testi v tests/test_tax_engine.py te bodo opozorili na spremembo.
+
+year: 2026
+checked_on: 2026-10-01
+
+rules:
+
+  # ---------------------------------------------------------------- DOHODNINA
+  - id: dohodnina.lestvica
+    title: Lestvica za odmero dohodnine 2026 (letna)
+    effective_from: 2026-01-01
+    effective_to: 2026-12-31
+    taxpayer_type: [dejanski]
+    formula: "davek = Σ (del osnove v razredu × stopnja razreda)"
+    params:
+      brackets:
+        - {upto: 9721.43, rate: 0.16}
+        - {upto: 28592.44, rate: 0.26}
+        - {upto: 57184.88, rate: 0.33}
+        - {upto: 82346.23, rate: 0.39}
+        - {upto: null, rate: 0.50}
+    source: "ZDoh-2, 122. člen; Pravilnik o določitvi lestvice za odmero dohodnine in olajšav za leto 2026"
+    source_url: https://www.fu.gov.si/davki_in_druge_dajatve/podrocja/dohodnina/
+    source_date: 2025-12-01
+    verified: true
+    verified_by: [zvezarfr.si, minimax.si, racunovodja.com]
+
+  - id: dohodnina.splosna_olajsava
+    title: Splošna olajšava 2026
+    effective_from: 2026-01-01
+    effective_to: 2026-12-31
+    taxpayer_type: [dejanski]
+    formula: "osnovna 5.551,93 €; če skupni dohodek ≤ 17.766,18 € še dodatno 20.832,39 − 1,17259 × dohodek"
+    params:
+      base: 5551.93
+      additional_threshold: 17766.18
+      additional_constant: 20832.39
+      additional_factor: 1.17259
+    source: "ZDoh-2, 111. člen; Pravilnik za leto 2026"
+    source_url: https://www.fu.gov.si/davki_in_druge_dajatve/podrocja/dohodnina/
+    source_date: 2025-12-01
+    verified: true
+    verified_by: [zvezarfr.si, minimax.si]
+
+  - id: dohodnina.olajsava_otroci
+    title: Olajšava za vzdrževane otroke 2026 (letno)
+    effective_from: 2026-01-01
+    effective_to: 2026-12-31
+    taxpayer_type: [dejanski]
+    formula: "1. otrok 2.995,83; 2. otrok 3.256,77; 3. otrok 5.432,02; vsak nadaljnji + 2.175,25 glede na prejšnjega; otrok s posebno nego 10.856,24"
+    params:
+      first: 2995.83
+      second: 3256.77
+      third: 5432.02
+      increment_after_third: 2175.25
+      special_care: 10856.24
+    source: "ZDoh-2, 114. člen; Pravilnik za leto 2026"
+    source_url: https://www.fu.gov.si/davki_in_druge_dajatve/podrocja/dohodnina/
+    source_date: 2025-12-01
+    verified: true
+    verified_by: [data.si, forum-media.si]
+
+  - id: dohodnina.olajsava_vlaganja
+    title: Olajšava za vlaganja v opremo in neopredmetena sredstva
+    effective_from: 2026-01-01
+    effective_to: 2026-12-31
+    taxpayer_type: [dejanski]
+    formula: "zmanjšanje davčne osnove = 40 % vlaganj, največ do višine davčne osnove"
+    params:
+      rate: 0.40
+    source: "ZDoh-2, 66.a člen"
+    source_url: https://pisrs.si/pregledPredpisa?id=ZAKO4697
+    source_date: 2026-01-01
+    verified: false
+    note: "Stopnja 40 % velja že več let; za 2026 preveri, da se ni spremenila in katere investicije so izvzete (npr. osebna vozila)."
+
+  # ---------------------------------------------------------------- NORMIRANCI (od 1.1.2026, ZPRZ)
+  - id: normiran.odhodki
+    title: Normirani odhodki 2026
+    effective_from: 2026-01-01
+    effective_to: 2026-12-31
+    taxpayer_type: [normiran]
+    formula: "polni (≥ 9 mesecev polno zavarovan): 80 % prihodkov do 60.000 €, nad tem 0 %. Ostali: 80 % do 12.500 €, 40 % od 12.500 do 30.000 €, nad tem 0 %"
+    params:
+      full:
+        - {upto: 60000, rate: 0.80}
+        - {upto: null, rate: 0.0}
+      partial:
+        - {upto: 12500, rate: 0.80}
+        - {upto: 30000, rate: 0.40}
+        - {upto: null, rate: 0.0}
+      full_min_months: 9
+    source: "ZDoh-2 kot spremenjen z Zakonom o prenovi sistema normirancev (velja od 1.1.2026); FURS pojasnila"
+    source_url: https://www.fu.gov.si/davki_in_druge_dajatve/podrocja/dohodnina/
+    source_date: 2026-01-01
+    verified: true
+    verified_by: [mladipodjetnik.si, moj-racun.si, nadlani.si]
+    note: "Pri s.p., ki je odprt med letom in je v tem letu manj kot 9 mesecev zavarovan, se uporabi lestvica za 'ostale'. Za svoj primer to potrdi pri FURS."
+
+  - id: normiran.stopnja
+    title: Stopnja dohodnine za normirance 2026 (dokončna, cedularna)
+    effective_from: 2026-01-01
+    effective_to: 2026-12-31
+    taxpayer_type: [normiran]
+    formula: "polni: 20 % do 72.000 € osnove, 35 % nad tem. Ostali: 20 % do 33.000 € osnove, 35 % nad tem"
+    params:
+      full:
+        - {upto: 72000, rate: 0.20}
+        - {upto: null, rate: 0.35}
+      partial:
+        - {upto: 33000, rate: 0.20}
+        - {upto: null, rate: 0.35}
+      full_min_months: 9
+    source: "ZDoh-2 (spremembe od 1.1.2026), 7. člen zakona o prenovi normirancev; FURS pojasnilo"
+    source_url: https://www.fu.gov.si/davki_in_druge_dajatve/podrocja/dohodnina/
+    source_date: 2026-01-01
+    verified: true
+    verified_by: [mladipodjetnik.si, moj-racun.si]
+
+  - id: normiran.vstopni_prag
+    title: Prag za vstop / ostanek v normiranem sistemu (povprečje dveh preteklih let)
+    effective_from: 2026-01-01
+    effective_to: 2026-12-31
+    taxpayer_type: [normiran]
+    formula: "povprečje prihodkov dveh zaporednih preteklih let ≤ prag; prag 120.000 € (obe leti ≥ 75 % polno zavarovan), 85.000 € (le eno leto), 50.000 € (nobeno)"
+    params:
+      both_years: 120000
+      one_year: 85000
+      none: 50000
+    source: "ZDoh-2 (spremembe od 1.1.2026); FURS pojasnilo"
+    source_url: https://www.fu.gov.si/davki_in_druge_dajatve/podrocja/dohodnina/
+    source_date: 2026-01-01
+    verified: true
+    verified_by: [mladipodjetnik.si, poslovni-pregled.finance]
+
+  # ---------------------------------------------------------------- PRISPEVKI ZA SOCIALNO VARNOST (samozaposleni)
+  - id: prispevki.stopnje
+    title: Stopnje prispevkov samozaposlenih
+    effective_from: 2025-07-01
+    effective_to: null
+    taxpayer_type: [normiran, dejanski]
+    formula: "prispevki = zavarovalna osnova × vsota stopenj (40,20 %)"
+    params:
+      components:
+        - {key: piz, label: "Pokojninsko in invalidsko (PIZ)", rate: 0.2435}
+        - {key: zz, label: "Zdravstveno zavarovanje (vključno poškodbe pri delu)", rate: 0.1345}
+        - {key: do, label: "Dolgotrajna oskrba", rate: 0.0200}
+        - {key: starsevsko, label: "Starševsko varstvo", rate: 0.0020}
+        - {key: zaposlovanje, label: "Zaposlovanje", rate: 0.0020}
+    source: "ZPIZ-2, ZZVZZ, ZSDP-1, ZUTD, ZDOsk; Zakon o prispevkih za socialno varnost"
+    source_url: https://spot.gov.si/sl/teme/prispevki-za-socialno-varnost
+    source_date: 2025-07-01
+    verified: true
+    verified_by: [mojeure.si, moj-racun.si, data.si]
+
+  - id: prispevki.min_osnova
+    title: Najnižja zavarovalna osnova (60 % povprečne plače)
+    effective_from: 2026-01-01
+    effective_to: 2026-12-31
+    taxpayer_type: [normiran, dejanski]
+    formula: "najnižja mesečna osnova = 60 % zadnje znane povprečne letne plače, preračunane na mesec"
+    params:
+      periods:
+        - {from: 2026-01-01, to: 2026-01-31, value: 1436.95, verified: false}
+        - {from: 2026-02-01, to: 2026-12-31, value: 1521.62, verified: true}
+    source: "ZPIZ-2, 145. člen; povprečna plača 2025 = 2.536,03 € (SURS)"
+    source_url: https://www.zpiz.si/cms/content2019/samozaposlene-osebe
+    source_date: 2026-03-01
+    verified: true
+    verified_by: [ozs.si, gzs.si, mojeure.si]
+    note: "Nova osnova velja za prispevke od februarja 2026 dalje (plačilo v marcu): uradni znesek za februar je 648,85 € (z OZP 37,17 €), od marca 651,04 € (z OZP 39,36 €) — oba se ujemata z izračunom. Vrednost za januar 2026 ni neodvisno potrjena."
+
+  - id: prispevki.max_osnova
+    title: Najvišja zavarovalna osnova (3,5 × povprečna plača)
+    effective_from: 2026-01-01
+    effective_to: 2026-12-31
+    taxpayer_type: [normiran, dejanski]
+    formula: "najvišja mesečna osnova = 3,5 × povprečna mesečna plača (od marca 2026: 3,5 × 2.536,03 = 8.876,11 €)"
+    params:
+      periods:
+        - {from: 2026-01-01, to: 2026-01-31, value: 8382.22, verified: false}
+        - {from: 2026-02-01, to: 2026-12-31, value: 8876.11, verified: true}
+    source: "ZPIZ-2, 145. člen"
+    source_url: https://www.zpiz.si/cms/content2019/samozaposlene-osebe
+    source_date: 2026-03-01
+    verified: true
+    verified_by: [moj-racun.si]
+
+  - id: prispevki.osnova_iz_dobicka
+    title: Zavarovalna osnova iz dobička preteklega leta
+    effective_from: 2026-01-01
+    effective_to: null
+    taxpayer_type: [normiran, dejanski]
+    formula: "letna osnova = (dobiček + obračunani prispevki preteklega leta) × (1 − 25 %); mesečna = letna / 12; omejena z min in max osnovo"
+    params:
+      reduction: 0.25
+    source: "ZPIZ-2, 145. člen"
+    source_url: https://pisrs.si/pregledPredpisa?id=ZAKO6280
+    source_date: 2026-01-01
+    verified: false
+    note: "Zmanjšanje 25 % je povzeto po dveh virih (moj-racun.si, minimax). Pri normirancih se prispevki ne prištevajo, ker niso bili odšteti od osnove. Preveri na informativnem izračunu FURS."
+
+  - id: prispevki.ozp
+    title: Obvezni zdravstveni prispevek (pavšal)
+    effective_from: 2026-01-01
+    effective_to: 2027-02-28
+    taxpayer_type: [normiran, dejanski]
+    formula: "fiksni mesečni znesek"
+    params:
+      periods:
+        - {from: 2026-01-01, to: 2026-02-28, value: 37.17, verified: true}
+        - {from: 2026-03-01, to: 2027-02-28, value: 39.36, verified: true}
+    source: "ZZVZZ (OZP), uskladitev 1. marca z rastjo povprečne plače"
+    source_url: https://zavezanec.zzzs.si/prispevki-za-obvezno-zdravstveno-zavarovanje/obvezni-zdravstveni-prispevek/
+    source_date: 2026-03-01
+    verified: true
+    verified_by: [zzzs.si, zds.si, ozs.si]
+
+  - id: prispevki.prva_samozaposlitev
+    title: Delna oprostitev PIZ ob prvem vpisu v poslovni register
+    effective_from: 2014-01-01
+    effective_to: null
+    taxpayer_type: [normiran, dejanski]
+    formula: "prvih 12 mesecev 50 % oprostitev PIZ prispevkov, naslednjih 12 mesecev 30 %"
+    params:
+      first_12_months: 0.50
+      next_12_months: 0.30
+    source: "ZPIZ-2, 157. člen (spodbude za prvo samozaposlitev)"
+    source_url: https://mladipodjetnik.si/podjetniski-koticek/racunovodstvo/oprostitev-placila-prispevkov-ob-odprtju-podjetja
+    source_date: 2026-01-01
+    verified: true
+    verified_by: [mladipodjetnik.si, stajerskagz.si, moj-racun.si]
+    note: "Velja samo ob PRVEM vpisu v poslovni register (ne, če si že kdaj imel s.p.)."
+
+  - id: prispevki.rok
+    title: Rok plačila prispevkov
+    effective_from: 2020-01-01
+    effective_to: null
+    taxpayer_type: [normiran, dejanski]
+    formula: "do 20. v mesecu za pretekli mesec"
+    params:
+      day: 20
+    source: "ZPSV; FURS"
+    source_url: https://spot.gov.si/sl/teme/prispevki-za-socialno-varnost
+    source_date: 2026-01-01
+    verified: true
+    verified_by: [spot.gov.si, mladipodjetnik.si]
+
+  # ---------------------------------------------------------------- AKONTACIJA DOHODNINE
+  - id: akontacija.obroki
+    title: Obroki akontacije dohodnine od dejavnosti
+    effective_from: 2020-01-01
+    effective_to: null
+    taxpayer_type: [normiran, dejanski]
+    formula: "letna akontacija > 400 € → mesečni obroki do 20. v mesecu za pretekli mesec; ≤ 400 € → trimesečni obroki do 10. dne po koncu trimesečja. V prvem letu dejavnosti akontacije ni (ni še davčnega obračuna)."
+    params:
+      monthly_threshold: 400
+      monthly_due_day: 20
+      quarterly_due_day: 10
+    source: "ZDoh-2, 297. člen; ZDavP-2"
+    source_url: https://www.fu.gov.si/fileadmin/Internet/Davki_in_druge_dajatve/Podrocja/Dohodnina/Dohodek_iz_dejavnosti/Opis/Davki_za_zacetnike_-_fizicne_osebe_ki_opravljajo_dejavnost.pdf
+    source_date: 2026-01-01
+    verified: false
+    note: "Rok mesečnega obroka (20.) se v virih razlikuje; preveri v eDavkih na odločbi/obračunu akontacije."
+
+  - id: akontacija.letni_obracun
+    title: Davčni obračun akontacije dohodnine od dejavnosti
+    effective_from: 2020-01-01
+    effective_to: null
+    taxpayer_type: [normiran, dejanski]
+    formula: "oddaja do 31. marca za preteklo leto; razliko plačaš v 30 dneh od oddaje"
+    params:
+      due_month: 3
+      due_day: 31
+      payment_days_after: 30
+    source: "ZDavP-2, ZDoh-2"
+    source_url: https://www.fu.gov.si/davki_in_druge_dajatve/podrocja/dohodnina/
+    source_date: 2026-01-01
+    verified: true
+    verified_by: [fu.gov.si, lider.si]
+
+  # ---------------------------------------------------------------- DDV
+  - id: ddv.stopnje
+    title: Stopnje DDV
+    effective_from: 2013-07-01
+    effective_to: null
+    taxpayer_type: [normiran, dejanski]
+    formula: "splošna 22 %, nižja 9,5 %, posebna nižja 5 %"
+    params:
+      general: 0.22
+      reduced: 0.095
+      super_reduced: 0.05
+    source: "ZDDV-1, 41. in 41.a člen"
+    source_url: https://www.fu.gov.si/davki_in_druge_dajatve/podrocja/davek_na_dodano_vrednost_ddv/
+    source_date: 2026-01-01
+    verified: true
+    verified_by: [fu.gov.si, spot.gov.si]
+
+  - id: ddv.prag
+    title: Prag za obvezno identifikacijo za DDV
+    effective_from: 2025-01-01
+    effective_to: null
+    taxpayer_type: [normiran, dejanski]
+    formula: "letni promet > 60.000 € → ID za DDV s 1. dnem naslednjega leta; > 66.000 € → ID že v mesecu preseganja"
+    params:
+      threshold: 60000
+      immediate_threshold: 66000
+    source: "ZDDV-1, 94. člen (po noveli ZDDV-1O)"
+    source_url: https://www.fu.gov.si/poslovni_dogodki_podjetja/identifikacija_za_ddv
+    source_date: 2025-01-01
+    verified: true
+    verified_by: [fu.gov.si, vatcalc.com]
+
+  - id: ddv.obdobje
+    title: Davčno obdobje DDV
+    effective_from: 2013-01-01
+    effective_to: null
+    taxpayer_type: [normiran, dejanski]
+    formula: "novi zavezanec: mesečno vsaj prvih 12 koledarskih mesecev; nato trimesečno, če obdavčljivi promet preteklega leta ≤ 210.000 €; DDV-O in plačilo do zadnjega delovnega dne naslednjega meseca po obdobju"
+    params:
+      new_taxpayer_monthly_months: 12
+      quarterly_max_turnover: 210000
+    source: "ZDDV-1, 88. in 89. člen"
+    source_url: https://www.fu.gov.si/davki_in_druge_dajatve/podrocja/davek_na_dodano_vrednost_ddv/
+    source_date: 2026-01-01
+    verified: true
+    verified_by: [racunovodstvo.net, tax-fin-lex.si]

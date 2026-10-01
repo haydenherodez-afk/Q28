@@ -1,0 +1,33 @@
+# Zakoni, ki so SPREJETI, a še NE VELJAJO. Engine jih nikoli ne uporabi v "pravem"
+# izračunu — na voljo so samo v What-if simulatorju kot scenarij "kaj če začne veljati".
+#
+# ZIURS (Interventni zakon za razvoj Slovenije): sprejet v DZ 11.5.2026, Ustavno sodišče
+# je 24.7.2026 dopustilo referendum; zbiranje podpisov 1.9.–5.10.2026. Do izida
+# referenduma zakon ne velja. Stanje preverjeno 2026-10-01.
+
+year: 2026
+checked_on: 2026-10-01
+
+rules:
+  - id: pending.ziurs.razvojna_kapica
+    title: "ZIURS — razvojna kapica na zavarovalno osnovo"
+    status: pending_referendum
+    formula: "zavarovalna osnova ne sme presegati 7.500 € mesečno"
+    params:
+      max_osnova: 7500
+    source: "ZIURS (sprejet 11.5.2026, ni objavljen v Uradnem listu)"
+    source_url: https://www.ozs.si/novice/vecmesecna-negotovost-glede-uveljavitve-interventnega-zakona-se-nadaljuje-6a7481d42ca8e8b977055251
+    source_date: 2026-08-29
+    verified: true
+    verified_by: [ozs.si, spnomad.si, minimax.si]
+
+  - id: pending.ziurs.normiran_prag
+    title: "ZIURS — višji prag za normirance"
+    status: pending_referendum
+    formula: "prag prihodkov za normirance 150.000 €"
+    params:
+      threshold: 150000
+    source: "ZIURS (sprejet 11.5.2026, ni objavljen v Uradnem listu)"
+    source_url: https://www.spnomad.si/objave/interventni-zakon-2026-spremembe-za-sp
+    source_date: 2026-08-29
+    verified: false

@@ -1,0 +1,17 @@
+# skrivnosti in podatki — NIKOLI v git
+.env
+*.db
+backend/data/
+data/
+*.pdf
+!docs/**/*.pdf
+
+# odvisnosti in build
+backend/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+frontend/node_modules/
+frontend/.next/
+frontend/next-env.d.ts
+frontend/tsconfig.tsbuildinfo

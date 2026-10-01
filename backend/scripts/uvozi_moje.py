@@ -34,6 +34,8 @@ def najdi(mape: list[Path]) -> dict[str, list[Path]]:
             if not p.is_file() or p.stat().st_size > 60 * 1024 * 1024:
                 continue
             n = p.name.lower()
+            if n.startswith("~$"):  # začasna datoteka odprtega Excela
+                continue
             if n.endswith(".pdf") and "ddd_ddd" in n:
                 out["obracun"].append(p)
             elif n.endswith(".pdf") and "sprakt" in n:
@@ -94,7 +96,11 @@ def main():
         r = c.post("/api/profile/apply", headers=h, json=upd)
         print("  ✓ profil nastavljen" if r.status_code == 200 else f"  ✗ profil: {r.text}")
         for p in f["racuni"]:
-            data = p.read_bytes()
+            try:
+                data = p.read_bytes()
+            except OSError as e:
+                print(f"  ✗ {p.name}: ni mogoče prebrati ({e}) — zapri datoteko v Excelu in poženi znova")
+                continue
             pre = c.post("/api/import/invoices", headers=h, data={"dry_run": "true"}, files={"file": (p.name, data)}).json()
             years = sorted(pre.get("by_year", {}))
             mode = a.ddv_2026 if "2026" in years else a.ddv_2025

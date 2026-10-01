@@ -81,3 +81,49 @@ def test_excel_export():
     assert [i.number for i in b.invoices] == ["2025-1", "2025-2"]
     assert b.invoices[0].paid_amount == Decimal("1220.00") and b.invoices[1].paid_amount is None
     assert b.invoices[1].net == Decimal("2000.00") and b.invoices[1].issue_date == date(2025, 8, 2)
+
+
+def _evelope_xlsx(rows):
+    """Format izvoza seznama računov iz Evelope (stolpci kot v pravem izvozu; podatki izmišljeni)."""
+    from datetime import datetime
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Računi"
+    ws.append(["Št. računa", "Partner", "Datum storitve", "Rok plačila", "Znesek z DDV", "Status"])
+    for r in rows:
+        ws.append(r)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_evelope_excel_format():
+    from datetime import datetime
+    from app.integrations.einvoice_import import apply_vat_mode
+    data = _evelope_xlsx([
+        ("1/2026", "PRIMER D.O.O.", "1. 1. 2026 - 31. 1. 2026", datetime(2026, 2, 13, 6, 43, 43), 1834.56, "Plačano"),
+        ("2/2026", "DRUGI D.O.O.", "15. 1. 2026", datetime(2026, 1, 31, 6, 37), 650, "Poslano"),
+        ("3/2026", "PRIMER D.O.O.", "1. 5. 2026 - 31. 5. 2026", datetime(2026, 5, 28), 2400, "Plačano"),
+        ("4/2025", "PRIMER D.O.O.", "1. 11. 2025", datetime(2025, 1, 20), 777, "Poslano"),
+        ("5/2026", "PRIMER D.O.O.", "1. 3. 2026", datetime(2026, 3, 31), 0, "Izdano"),
+        ("CR 1/2026", "PRIMER D.O.O.", "1. 6. 2026 - 12. 6. 2026", datetime(2026, 7, 3), -1500, "Plačano"),
+    ])
+    b = parse_file(data, "izvoz.xlsx")
+    inv = {i.number: i for i in b.invoices}
+    assert len(inv) == 6 and any("datuma izdaje" in w for w in b.warnings) and any("način DDV" in w for w in b.warnings)
+    a = inv["1/2026"]
+    assert (a.service_from, a.service_date, a.issue_date) == (date(2026, 1, 1), date(2026, 1, 31), date(2026, 1, 31))
+    assert a.paid_amount == Decimal("1834.56") and a.paid_date == date(2026, 2, 13) and not a.vat_known
+    assert inv["2/2026"].paid_amount is None
+    assert inv["3/2026"].issue_date == date(2026, 5, 28)              # rok pred koncem obdobja -> izdan najkasneje na rok
+    assert "tipkarska" in inv["4/2025"].note                        # rok pred začetkom storitve
+    assert "0 €" in inv["5/2026"].note
+    cr = inv["CR 1/2026"]
+    assert cr.credit_note and cr.gross == Decimal("-1500.00") and cr.paid_amount == Decimal("-1500.00")
+    # način DDV
+    apply_vat_mode(a, "76a")
+    assert (a.net, a.vat) == (Decimal("1834.56"), Decimal("0.00"))
+    b2 = parse_file(data, "izvoz.xlsx")
+    x = apply_vat_mode(b2.invoices[0], "vkljucen22")
+    assert x.net == Decimal("1503.74") and x.vat == Decimal("330.82") and x.net + x.vat == x.gross

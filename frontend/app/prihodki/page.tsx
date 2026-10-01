@@ -108,7 +108,7 @@ export default function Prihodki() {
             <Field label="ID za DDV kupca"><input className="field" value={form.customer_tax_number} onChange={(e) => setForm({ ...form, customer_tax_number: e.target.value })} placeholder="SI12345678" /></Field>
             <Field label="Datum izdaje"><input className="field" type="date" required value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} /></Field>
             <Field label="Rok plačila"><input className="field" type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} /></Field>
-            <Field label="Znesek brez DDV (€)"><input className="field num" inputMode="decimal" required value={form.net} onChange={(e) => setForm({ ...form, net: e.target.value.replace(",", ".") })} /></Field>
+            <Field label="Znesek brez DDV (€)" hint="Za dobropis vpiši negativen znesek."><input className="field num" inputMode="decimal" required value={form.net} onChange={(e) => setForm({ ...form, net: e.target.value.replace(",", ".") })} /></Field>
             <Field label="Stopnja DDV">
               <select className="field" value={form.vat_rate} onChange={(e) => setForm({ ...form, vat_rate: e.target.value })}>
                 <option value="0.22">22 %</option><option value="0.095">9,5 %</option><option value="0.05">5 %</option><option value="0">0 % (oproščeno / obrnjena obveznost)</option>

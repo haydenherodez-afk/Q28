@@ -90,6 +90,10 @@ Uporabljen model je `claude-opus-5-5`, nastavljiv z `HERICR_AI_MODEL`. Vklopljen
    HericR prebere režim, začetek dejavnosti, lanske prihodke in akontacijo. Nato **sam izračuna isto kot FURS in pokaže, ali se ujema**.
 3. **Prihodki → ⬇️ Uvozi iz Evelope**: v Evelope izvozi račune kot e-račun XML ali ZIP ovojnico (lahko tudi Excel).
    Najprej vidiš predogled, nato potrdiš. Podvojeni računi se preskočijo, zato lahko uvoz ponoviš kadarkoli.
+   Excel izvoz Evelope (»Št. računa, Partner, Datum storitve, Rok plačila, Znesek z DDV, Status«) nima datuma izdaje,
+   datuma plačila in ločenega DDV. Zato izbereš **način DDV** (nezavezanec / obrnjena obveznost po 76.a / vključen DDV).
+   Za datum izdaje se uporabi konec obdobja storitve, najkasneje rok plačila, za plačilo pa rok plačila.
+   Točne datume plačil dobiš z uvozom bančnega izpiska. Dobropisi (»CR …«) se uvozijo z negativnim zneskom.
 4. **Banka → Uvozi izpisek**: camt.053 XML iz spletne banke (NLB, OTP, SKB, Intesa …) ali CSV.
 5. Preglej **Home**, **Koledar** in **Napake**.
 

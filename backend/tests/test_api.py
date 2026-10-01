@@ -173,3 +173,22 @@ def test_import_invoices_preview_then_commit(c, auth):
     assert again["created_invoices"] == 0 and again["skipped_duplicates"] == 1
     inv = [i for i in c.get("/api/invoices?year=2025", headers=auth).json() if i["number"] == "UVOZ-1"][0]
     assert inv["gross"] == "1220.00" and inv["paid_date"] == "2025-11-18"
+
+
+def test_evelope_excel_requires_vat_mode(c, auth):
+    from datetime import datetime
+    from tests.test_einvoice_import import _evelope_xlsx
+    data = _evelope_xlsx([("EV-1/2026", "PRIMER D.O.O.", "1. 2. 2026 - 28. 2. 2026", datetime(2026, 3, 10), 1000, "Plačano"),
+                          ("CR EV-1/2026", "PRIMER D.O.O.", "1. 2. 2026", datetime(2026, 3, 10), -200, "Plačano")])
+    f = {"file": ("izvoz.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    pre = c.post("/api/import/invoices", headers=auth, data={"dry_run": "true"}, files=f).json()
+    assert pre["needs_vat_mode"] is True and "76a" in pre["vat_modes"]
+    assert c.post("/api/import/invoices", headers=auth, data={"dry_run": "false"}, files=f).status_code == 422
+    done = c.post("/api/import/invoices", headers=auth, data={"dry_run": "false", "vat_mode": "76a"}, files=f).json()
+    assert done["created_invoices"] == 2
+    listing = c.get("/api/invoices?year=2026", headers=auth)
+    assert listing.status_code == 200                       # dobropis (negativen znesek) ne sme podreti seznama
+    cr = [i for i in listing.json() if i["number"] == "CR EV-1/2026"][0]
+    assert cr["net"] == "-200.00" and cr["gross"] == "-200.00"
+    inv = [i for i in listing.json() if i["number"] == "EV-1/2026"][0]
+    assert inv["vat"] == "0.00" and "76.a" in inv["vat_note"] and inv["paid_date"] == "2026-03-10"

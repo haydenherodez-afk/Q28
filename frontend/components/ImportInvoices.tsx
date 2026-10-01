@@ -5,8 +5,8 @@ import { api } from "@/lib/api";
 import { dateSl, eur } from "@/lib/fmt";
 import { Alert, Badge, Field, Modal } from "./ui";
 
-type Row = { number: string; issue_date: string; due_date: string | null; buyer_name: string; seller_name: string; net: string; vat: string; gross: string; direction: string; duplicate: boolean; paid_date: string | null; pdf_name: string | null; warnings: string[] };
-type Out = { dry_run: boolean; formats: string[]; found: number; created_invoices: number; created_expenses: number; skipped_duplicates: number; pdfs: number; by_year: Record<string, { issued_net: string; received_net: string; count: number }>; checks: { label: string; import: string; profile: string; match: boolean; difference: string }[]; warnings: string[]; rows: Row[] };
+type Row = { number: string; issue_date: string; due_date: string | null; service_from: string | null; service_date: string | null; buyer_name: string; seller_name: string; net: string; vat: string; gross: string; direction: string; duplicate: boolean; paid_date: string | null; pdf_name: string | null; note: string; warnings: string[] };
+type Out = { dry_run: boolean; formats: string[]; found: number; created_invoices: number; created_expenses: number; skipped_duplicates: number; pdfs: number; by_year: Record<string, { issued_net: string; received_net: string; count: number }>; checks: { label: string; import: string; profile: string; match: boolean; difference: string }[]; warnings: string[]; rows: Row[]; needs_vat_mode: boolean; vat_modes: Record<string, string>; vat_mode: string | null };
 
 /** Uvoz računov za nazaj iz Evelope (eSLOG XML / ZIP ovojnica / Excel) ali drugega programa. */
 export default function ImportInvoices({ onDone }: { onDone: () => void }) {
@@ -14,18 +14,20 @@ export default function ImportInvoices({ onDone }: { onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [kind, setKind] = useState("auto");
   const [paidUntil, setPaidUntil] = useState("");
+  const [vatMode, setVatMode] = useState("");
   const [res, setRes] = useState<Out | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
 
-  async function run(dry: boolean, f = file) {
+  async function run(dry: boolean, f = file, mode = vatMode) {
     if (!f) return;
     setBusy(true); setErr(null);
     try {
       const fd = new FormData();
       fd.append("file", f); fd.append("kind", kind); fd.append("dry_run", String(dry));
       if (paidUntil) fd.append("assume_paid_until", paidUntil);
+      if (mode) fd.append("vat_mode", mode);
       const r = await api<Out>("/import/invoices", { method: "POST", body: fd });
       setRes(r);
       if (!dry) onDone();
@@ -55,6 +57,14 @@ export default function ImportInvoices({ onDone }: { onDone: () => void }) {
               <input className="field" type="date" value={paidUntil} onChange={(e) => setPaidUntil(e.target.value)} />
             </Field>
           </div>
+          {res && (res.needs_vat_mode || res.vat_mode) && (
+            <Field label="Način DDV za te račune (izvoz nima ločenega DDV)" hint="Pri računih brez DDV za gradbene storitve med zavezanci izberi 76.a. Če nisi prepričan, vprašaj računovodjo.">
+              <select className="field" value={vatMode} onChange={(e) => { setVatMode(e.target.value); run(true, file, e.target.value); }}>
+                <option value="">— izberi —</option>
+                {Object.entries(res.vat_modes).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+            </Field>
+          )}
           {file && <button className="btn" onClick={() => run(true)} disabled={busy}>{busy ? "Berem…" : "Osveži predogled"}</button>}
           {err && <Alert kind="error">{err}</Alert>}
           {res && (
@@ -77,15 +87,16 @@ export default function ImportInvoices({ onDone }: { onDone: () => void }) {
                   {c.label}: uvoz {eur(c.import)} vs nastavitve {eur(c.profile)} {c.match ? "— ujema se ✅" : `— razlika ${eur(c.difference)} (manjkajoči ali odvečni računi?)`}
                 </Alert>
               ))}
-              {res.warnings.length > 0 && <Alert kind="warning">{res.warnings.slice(0, 5).join(" · ")}{res.warnings.length > 5 && ` … (+${res.warnings.length - 5})`}</Alert>}
+              {res.warnings.slice(0, 6).map((w) => <Alert key={w} kind="warning">{w}</Alert>)}
+              {res.warnings.length > 6 && <p className="text-xs text-ink-3">… in še {res.warnings.length - 6} opozoril</p>}
               <div className="max-h-72 overflow-auto rounded-xl border border-line">
                 <table className="tbl">
-                  <thead><tr><th>Št.</th><th>Datum</th><th>Partner</th><th className="r">Brez DDV</th><th className="r">Z DDV</th><th /></tr></thead>
+                  <thead><tr><th>Št.</th><th>Izdan</th><th>Partner</th><th className="r">Osnova</th><th className="r">Z DDV</th><th /></tr></thead>
                   <tbody>{res.rows.map((r, i) => (
                     <tr key={i} className={r.duplicate ? "opacity-50" : ""}>
                       <td className="font-medium">{r.number}</td>
-                      <td>{dateSl(r.issue_date)}</td>
-                      <td>{r.direction === "issued" ? r.buyer_name : r.seller_name}</td>
+                      <td className="whitespace-nowrap">{dateSl(r.issue_date)}{r.service_from && r.service_from !== r.service_date && <span className="block text-[11px] text-ink-3">storitev {dateSl(r.service_from)}–{dateSl(r.service_date)}</span>}</td>
+                      <td>{r.direction === "issued" ? r.buyer_name : r.seller_name}{r.note && <span className="block text-[11px] text-warn">⚠️ {r.note}</span>}</td>
                       <td className="r">{eur(r.net)}</td>
                       <td className="r">{eur(r.gross)}</td>
                       <td className="whitespace-nowrap">
@@ -97,7 +108,10 @@ export default function ImportInvoices({ onDone }: { onDone: () => void }) {
                 </table>
               </div>
               {res.dry_run && res.found - res.skipped_duplicates > 0 && (
-                <div className="flex justify-end"><button className="btn btn-primary" onClick={() => run(false)} disabled={busy}>{busy ? "Uvažam…" : `✅ Uvozi ${res.found - res.skipped_duplicates} računov`}</button></div>
+                <div className="flex items-center justify-end gap-3">
+                  {res.needs_vat_mode && !vatMode && <span className="text-xs text-warn">Najprej izberi način DDV.</span>}
+                  <button className="btn btn-primary" onClick={() => run(false)} disabled={busy || (res.needs_vat_mode && !vatMode)}>{busy ? "Uvažam…" : `✅ Uvozi ${res.found - res.skipped_duplicates} računov`}</button>
+                </div>
               )}
             </div>
           )}

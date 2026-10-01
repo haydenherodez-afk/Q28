@@ -32,6 +32,9 @@ class ParsedInvoice:
     paid_date: date | None = None
     paid_amount: Decimal | None = None
     credit_note: bool = False
+    vat_known: bool = True        # False: vir ima samo znesek z DDV (npr. Excel izvoz Evelope)
+    service_from: date | None = None
+    note: str = ""
     source: str = ""
     pdf_name: str | None = None
     warnings: list[str] = field(default_factory=list)
@@ -185,9 +188,10 @@ COLS = {
     "buyer_tax": ["id za ddv", "davčna številka", "davcna stevilka", "id ddv kupca", "vat id"],
     "net": ["znesek brez ddv", "osnova", "neto", "brez ddv", "vrednost brez ddv", "net", "subtotal"],
     "vat": ["ddv", "znesek ddv", "vat", "tax"],
-    "gross": ["skupaj", "za plačilo", "za placilo", "znesek z ddv", "bruto", "z ddv", "total", "znesek"],
+    "gross": ["znesek z ddv", "skupaj", "za plačilo", "za placilo", "bruto", "z ddv", "total", "znesek"],
     "paid_date": ["datum plačila", "datum placila", "plačano dne", "placano dne", "paid date"],
     "paid_amount": ["plačano", "placano", "plačan znesek", "paid"],
+    "status": ["status", "stanje"],
 }
 
 
@@ -202,14 +206,23 @@ def _map(header: list[str]) -> dict[str, int]:
     return out
 
 
-def _cell_date(v) -> date | None:
+def _cell_range(v) -> tuple[date | None, date | None]:
+    """Datum ali obdobje -> (od, do). Evelope izvozi obdobje storitve kot '1. 1. 2026 - 31. 1. 2026'."""
     if v is None or v == "":
-        return None
+        return None, None
     if isinstance(v, datetime):
-        return v.date()
+        return v.date(), v.date()
     if isinstance(v, date):
-        return v
-    return parse_date(str(v))
+        return v, v
+    found = re.findall(r"\d{1,2}\.\s*\d{1,2}\.\s*\d{4}|\d{4}-\d{2}-\d{2}", str(v))
+    if len(found) >= 2:
+        return parse_date(found[0].replace(" ", "")), parse_date(found[-1].replace(" ", ""))
+    d = parse_date(str(v).replace(" ", "")) if found else parse_date(str(v))
+    return d, d
+
+
+def _cell_date(v) -> date | None:
+    return _cell_range(v)[1]
 
 
 def _cell_amount(v) -> Decimal | None:
@@ -224,12 +237,20 @@ def parse_table(rows: list[list], source: str) -> tuple[list[ParsedInvoice], lis
     hdr_i, mapping = None, {}
     for i, row in enumerate(rows[:20]):
         m = _map(row)
-        if "number" in m and "issue_date" in m and ({"net", "gross"} & set(m)):
+        if "number" in m and ({"issue_date", "service_date"} & set(m)) and ({"net", "gross"} & set(m)):
             hdr_i, mapping = i, m
             break
     if hdr_i is None:
         raise ValueError("V tabeli ni prepoznane glave (potrebni: številka računa, datum, znesek).")
     out, warns = [], []
+    if "issue_date" not in mapping:
+        warns.append("Izvoz nima datuma izdaje — uporabljen je konec obdobja storitve (najkasneje rok plačila). "
+                     "Datum lahko pri posameznem računu popraviš.")
+    if "status" in mapping and "paid_date" not in mapping:
+        warns.append("Izvoz nima datuma plačila — pri plačanih računih je ocenjen z rokom plačila. "
+                     "Točne datume dobiš z uvozom bančnega izpiska.")
+    if "vat" not in mapping and "net" not in mapping:
+        warns.append("Izvoz ima samo znesek z DDV — izberi način DDV (nezavezanec, 76.a ali vključen DDV).")
     for row in rows[hdr_i + 1:]:
         if not row or all(c in (None, "") for c in row):
             continue
@@ -239,7 +260,10 @@ def parse_table(rows: list[list], source: str) -> tuple[list[ParsedInvoice], lis
             if not number or number.lower().startswith(("skupaj", "total")):
                 continue
             net, vat, gross = _cell_amount(get("net")), _cell_amount(get("vat")), _cell_amount(get("gross"))
-            if vat is None and net is not None and gross is not None:
+            vat_known = not ("vat" not in mapping and "net" not in mapping)
+            if not vat_known:
+                net, vat = gross, None   # DDV določi uporabnik (način DDV) pri uvozu
+            if vat is None and net is not None and gross is not None and vat_known:
                 vat = gross - net
             if net is None and gross is not None:
                 net = gross - (vat or Decimal(0))
@@ -247,6 +271,22 @@ def parse_table(rows: list[list], source: str) -> tuple[list[ParsedInvoice], lis
                 gross = net + (vat or Decimal(0))
             paid_amount = get("paid_amount")
             paid_date = _cell_date(get("paid_date"))
+            status = str(get("status") or "").strip().lower()
+            svc_from, svc_to = _cell_range(get("service_date"))
+            due = _cell_date(get("due_date"))
+            issue = _cell_date(get("issue_date"))
+            note = ""
+            if issue is None:
+                # izvoz brez datuma izdaje: račun je izdan ob koncu storitve, a najkasneje na rok plačila
+                issue = svc_to
+                if due and svc_from and due < svc_from:
+                    note = f"rok plačila {due.isoformat()} je pred začetkom storitve (tipkarska napaka?)"
+                elif due and svc_to and due < svc_to:
+                    issue = due
+            if status in ("plačano", "placano", "paid", "plačan", "placan") and paid_amount in (None, ""):
+                paid_amount = "da"
+                if not paid_date:
+                    paid_date = due if (due and issue and due >= issue) else issue
             pa = None
             if isinstance(paid_amount, str) and paid_amount.strip().lower() in ("da", "plačano", "placano", "yes", "paid"):
                 pa = gross
@@ -256,12 +296,21 @@ def parse_table(rows: list[list], source: str) -> tuple[list[ParsedInvoice], lis
                 pa = _cell_amount(paid_amount)
             if paid_date and pa is None:
                 pa = gross
-            out.append(ParsedInvoice(number=number, issue_date=_cell_date(get("issue_date")), net=r2(net), vat=r2(vat or 0),
-                                     gross=r2(gross), due_date=_cell_date(get("due_date")),
-                                     service_date=_cell_date(get("service_date")),
-                                     buyer_name=str(get("buyer_name") or "").strip(),
-                                     buyer_tax=str(get("buyer_tax") or "").strip() or None,
-                                     paid_date=paid_date, paid_amount=pa, source=source).check())
+            if pa is not None and gross is not None and gross < 0:
+                pa = gross  # dobropis
+            if gross == 0:
+                note = (note + "; " if note else "") + "znesek 0 € (preklican račun ali osnutek?)"
+            elif gross is not None and 0 < abs(gross) < 10:
+                note = (note + "; " if note else "") + f"nenavadno nizek znesek {gross} € (testni račun?)"
+            if issue is None:
+                raise ValueError("ni datuma")
+            inv = ParsedInvoice(number=number, issue_date=issue, net=r2(net), vat=r2(vat or 0), gross=r2(gross),
+                                due_date=due, service_date=svc_to, service_from=svc_from,
+                                buyer_name=str(get("buyer_name") or "").strip(),
+                                buyer_tax=str(get("buyer_tax") or "").strip() or None,
+                                paid_date=paid_date, paid_amount=pa, credit_note=gross < 0,
+                                vat_known=vat_known, note=note, source=source)
+            out.append(inv.check() if vat_known else inv)
         except (ValueError, InvalidOperation, TypeError) as e:
             warns.append(f"Vrstica preskočena ({e}): {[c for c in row][:6]}")
     return out, warns
@@ -349,3 +398,28 @@ def _attach_pdfs(b: ImportBundle):
             if p == stem or (token and token in re.sub(r"[^0-9a-z]", "", p)):
                 inv.pdf_name = pdf
                 break
+
+
+VAT_MODES = {
+    "nezavezanec": "Nisem bil zavezanec za DDV — znesek je osnova, DDV 0",
+    "76a": "Obrnjena davčna obveznost (76.a člen ZDDV-1) — znesek je osnova, DDV 0",
+    "vkljucen22": "Znesek vključuje 22 % DDV",
+    "vkljucen95": "Znesek vključuje 9,5 % DDV",
+}
+
+
+def apply_vat_mode(inv: ParsedInvoice, mode: str) -> ParsedInvoice:
+    """Za vire, ki imajo samo znesek z DDV: razdeli na osnovo in DDV po izbranem načinu."""
+    if inv.vat_known:
+        return inv
+    if mode not in VAT_MODES:
+        raise ValueError("Izberi način DDV za račune iz tega izvoza")
+    if mode in ("vkljucen22", "vkljucen95"):
+        rate = Decimal("0.22") if mode == "vkljucen22" else Decimal("0.095")
+        inv.net = r2(inv.gross / (1 + rate))
+        inv.vat = inv.gross - inv.net
+        inv.vat_rate = rate
+    else:
+        inv.net, inv.vat, inv.vat_rate = inv.gross, Decimal("0.00"), Decimal("0")
+    inv.vat_known = True
+    return inv.check()

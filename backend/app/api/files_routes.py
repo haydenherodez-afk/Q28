@@ -241,8 +241,8 @@ def _digits(s: str | None) -> str:
 
 @router.post("/import/invoices")
 async def import_invoices(file: UploadFile = File(...), kind: str = Form("auto"), dry_run: bool = Form(True),
-                          assume_paid_until: date | None = Form(None), user: User = Depends(current_user),
-                          db: Session = Depends(get_db)):
+                          assume_paid_until: date | None = Form(None), vat_mode: str = Form(""),
+                          user: User = Depends(current_user), db: Session = Depends(get_db)):
     """Uvoz izdanih (ali prejetih) računov iz izvoza Evelope / drugega programa.
     dry_run=true vrne predogled; dry_run=false shrani. Podvojeni računi se preskočijo."""
     from ..engines.ledger import ensure_profile
@@ -255,6 +255,15 @@ async def import_invoices(file: UploadFile = File(...), kind: str = Form("auto")
         bundle = einvoice_import.parse_file(data, file.filename or "uvoz")
     except Exception as e:  # noqa: BLE001
         raise HTTPException(422, f"Datoteke ni mogoče prebrati: {e}") from e
+    needs_vat_mode = any(not i.vat_known for i in bundle.invoices)
+    if needs_vat_mode and vat_mode:
+        try:
+            for i in bundle.invoices:
+                einvoice_import.apply_vat_mode(i, vat_mode)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+    elif needs_vat_mode and not dry_run:
+        raise HTTPException(422, "Izvoz nima ločenega DDV — izberi način DDV (nezavezanec / 76.a / vključen DDV).")
     bp = ensure_profile(db, user)
     me = _digits(bp.tax_number)
     existing_issued = {n.lower() for n in db.scalars(select(Invoice.number).where(Invoice.user_id == user.id))}
@@ -274,6 +283,8 @@ async def import_invoices(file: UploadFile = File(...), kind: str = Form("auto")
         dup = (inv.number.lower() in existing_issued) if direction == "issued" else \
             ((inv.seller_name.lower(), inv.number.lower()) in existing_received)
         paid_amount, paid_date = inv.paid_amount, inv.paid_date
+        if paid_date and paid_date > date.today():
+            paid_date = date.today()   # ocenjen datum plačila ne sme biti v prihodnosti
         if direction == "issued" and paid_amount is None and assume_paid_until and \
                 (inv.due_date or inv.issue_date) <= assume_paid_until:
             paid_amount, paid_date = inv.gross, inv.due_date or inv.issue_date
@@ -301,8 +312,10 @@ async def import_invoices(file: UploadFile = File(...), kind: str = Form("auto")
                            issue_date=inv.issue_date, service_date=inv.service_date, due_date=inv.due_date, net=inv.net,
                            vat_rate=vat_rate, vat=inv.vat, gross=inv.gross, paid_date=paid_date,
                            paid_amount=paid_amount or 0, document_id=doc_id,
-                           vat_note=("dobropis" if inv.credit_note else None),
-                           notes=f"uvoz: {inv.source}"))
+                           vat_note=("DDV ni obračunan v skladu s 76.a členom ZDDV-1" if vat_mode == "76a"
+                                     else "nezavezanec za DDV" if vat_mode == "nezavezanec" and inv.vat == 0 else None),
+                           notes="; ".join(x for x in (f"uvoz: {inv.source}", "dobropis" if inv.credit_note else "",
+                                                       inv.note) if x)))
             existing_issued.add(inv.number.lower())
             created_inv += 1
         else:
@@ -324,6 +337,8 @@ async def import_invoices(file: UploadFile = File(...), kind: str = Form("auto")
         db.commit()
     return {"dry_run": dry_run, "formats": sorted(bundle.formats), "found": len(bundle.invoices),
             "created_invoices": created_inv, "created_expenses": created_exp, "skipped_duplicates": skipped,
+            "needs_vat_mode": needs_vat_mode and not vat_mode, "vat_modes": einvoice_import.VAT_MODES,
+            "vat_mode": vat_mode or None,
             "pdfs": len(bundle.pdfs), "by_year": {y: {k: str(r2(val)) if isinstance(val, Decimal) else val
                                                       for k, val in v.items()} for y, v in by_year.items()},
             "checks": checks, "warnings": bundle.warnings[:50], "rows": rows[:300]}

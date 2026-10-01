@@ -78,7 +78,7 @@ class InvoiceIn(BaseModel):
     issue_date: date
     service_date: date | None = None
     due_date: date | None = None
-    net: Decimal = Field(ge=0)
+    net: Decimal  # negativen pri dobropisu
     vat_rate: Decimal = Decimal("0.22")
     vat: Decimal | None = None
     gross: Decimal | None = None
